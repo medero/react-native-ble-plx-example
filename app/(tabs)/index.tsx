@@ -1,11 +1,130 @@
-import { Image, StyleSheet, Platform } from 'react-native';
+import { Alert, Image, StyleSheet, Platform, Button, PermissionsAndroid } from 'react-native';
 
 import { HelloWave } from '@/components/HelloWave';
 import ParallaxScrollView from '@/components/ParallaxScrollView';
 import { ThemedText } from '@/components/ThemedText';
 import { ThemedView } from '@/components/ThemedView';
+import { BleManager } from 'react-native-ble-plx';
+import React from 'react';
+import * as ExpoDevice from "expo-device";
+
+export const manager = new BleManager();
 
 export default function HomeScreen() {
+
+  const requestAndroid31Permissions = async () => {
+    const bluetoothScanPermission = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_SCAN,
+      {
+        title: "Location Permission",
+        message: "Bluetooth Low Energy requires Location",
+        buttonPositive: "OK",
+      }
+    );
+    const bluetoothConnectPermission = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+      {
+        title: "Location Permission",
+        message: "Bluetooth Low Energy requires Location",
+        buttonPositive: "OK",
+      }
+    );
+    const fineLocationPermission = await PermissionsAndroid.request(
+      PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+      {
+        title: "Location Permission",
+        message: "Bluetooth Low Energy requires Location",
+        buttonPositive: "OK",
+      }
+    );
+
+    return (
+      bluetoothScanPermission === "granted" &&
+      bluetoothConnectPermission === "granted" &&
+      fineLocationPermission === "granted"
+    );
+  };
+
+  const requestPermissions = async () => {
+    if (Platform.OS === "android") {
+      if ((ExpoDevice.platformApiLevel ?? -1) < 31) {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+          {
+            title: "Location Permission",
+            message: "Bluetooth Low Energy requires Location",
+            buttonPositive: "OK",
+          }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } else {
+        const isAndroid31PermissionsGranted =
+          await requestAndroid31Permissions();
+
+        return isAndroid31PermissionsGranted;
+      }
+    } else {
+      return true;
+    }
+  };
+
+  const scanAndConnect = async () => {
+    const isPermissionsEnabled = await requestPermissions();
+    if (!isPermissionsEnabled) {
+      console.error("PERMISSIONS DENIED");
+    }
+
+    console.error("scanAndConnect");
+    manager.startDeviceScan(null, null, (error, device) => {
+      if (error) {
+          console.error(error);
+          return
+      }
+
+      console.error("Found",device.name, device.localName);
+
+      // Check if it is a device you are looking for based on advertisement data
+      // or other criteria.
+      // if (device.name === 'TI BLE Sensor Tag' || 
+      //     device.name === 'SensorTag') {
+          
+      //     // Stop scanning as it's not necessary if you are scanning for one device.
+      //     manager.stopDeviceScan();
+
+      //     // Proceed with connection.
+      // }
+    });
+  }
+
+  React.useEffect(() => {
+    const setupBluetooth = async () => {
+      console.log("Setting up initial manager subscription");
+      const isBluetoothEnabled = await manager.state();
+
+      if (isBluetoothEnabled !== 'PoweredOn') {
+        console.error('Bluetooth is not powered on. Prompting user to enable Bluetooth.');
+        Alert.alert(
+            'Enable Bluetooth',
+            'Please enable Bluetooth to scan for peripherals.',
+            [{ text: 'OK', onPress: () => {} }]
+        );
+        return;
+      }
+
+      manager.onStateChange((state) => {
+        const subscription = manager.onStateChange((state) => {
+            if (state === 'PoweredOn') {
+                scanAndConnect();
+                subscription.remove();
+            }
+        }, true);
+        return () => subscription.remove();
+      });
+    }
+
+    setupBluetooth();
+  }, [manager]);
+
   return (
     <ParallaxScrollView
       headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
@@ -16,7 +135,8 @@ export default function HomeScreen() {
         />
       }>
       <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
+        <ThemedText type="title">Hello World!</ThemedText>
+        <Button title="Scan" onPress={scanAndConnect} />
         <HelloWave />
       </ThemedView>
       <ThemedView style={styles.stepContainer}>
